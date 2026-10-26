@@ -1,7 +1,7 @@
 # Testing
 
 Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build environment: **81 passed in ~18 s**
-(Linux, Python 3.13). Windows is covered by the CI matrix (not yet observed running).
+(Linux, Python 3.13). GitHub Actions CI passed on windows-latest and ubuntu-latest with Python 3.11 and 3.13 (run 40253802229, commit 4ca7ef8).
 
 | Layer | File | What it proves |
 |---|---|---|
