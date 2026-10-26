@@ -27,7 +27,8 @@ class RiskLimits:
     max_new_positions_per_day: int = 2
     max_loss_per_trade_fraction: float = 0.05  # stop distance x position value <= 5% equity
     max_daily_loss_fraction: float = 0.05   # block new buys after a 5% down day
-    max_drawdown_fraction: float = 0.25     # block new buys while drawdown > 25%
+    max_drawdown_fraction: float = 0.25     # breach -> block new buys for drawdown_cooldown sessions
+    drawdown_cooldown: int = 21             # then re-arm with the peak reset to current equity (0 = halt forever)
     max_participation: float = 0.02         # order qty <= 2% of 20-day avg volume
     max_staleness_days: int = 4             # calendar days between last bar and decision
     max_price_deviation: float = 0.10       # reference price vs last close sanity bound
@@ -42,6 +43,9 @@ class RiskState:
     orders_today: int = 0
     new_positions_today: int = 0
     current_day: pd.Timestamp | None = None
+    halt_sessions_left: int = 0
+    halted_forever: bool = False
+    drawdown_breaches: int = 0
     seen_order_ids: set[str] = field(default_factory=set)
 
 
@@ -83,6 +87,11 @@ class RiskEngine:
         st.day_start_equity = equity
         st.orders_today = 0
         st.new_positions_today = 0
+        if st.halt_sessions_left > 0:
+            st.halt_sessions_left -= 1
+            if st.halt_sessions_left == 0:
+                st.peak_equity = equity  # re-arm: drawdown measured from here
+                self._audit({"event": "drawdown_halt_end", "day": str(st.current_day.date()), "equity": equity})
         st.peak_equity = max(st.peak_equity, equity)
 
     def update_equity(self, equity: float) -> None:
@@ -134,7 +143,15 @@ class RiskEngine:
             return Decision(False, "kill_switch")
         if equity <= 0:
             return Decision(False, "no_equity")
+        if st.halted_forever or st.halt_sessions_left > 0:
+            return Decision(False, "drawdown_halt")
         if st.peak_equity > 0 and 1 - equity / st.peak_equity > L.max_drawdown_fraction:
+            st.drawdown_breaches += 1
+            if L.drawdown_cooldown > 0:
+                st.halt_sessions_left = L.drawdown_cooldown
+            else:
+                st.halted_forever = True
+            self._audit({"event": "drawdown_halt_start", "equity": equity, "peak": st.peak_equity})
             return Decision(False, "max_drawdown_breached")
         if st.day_start_equity > 0 and 1 - equity / st.day_start_equity > L.max_daily_loss_fraction:
             return Decision(False, "max_daily_loss_breached")
