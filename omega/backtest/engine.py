@@ -240,7 +240,10 @@ def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = Bac
             holdings={s: Holding(p.qty, p.entry_index, p.avg_cost) for s, p in ledger.positions.items()},
         )
         target = strategy.decide(i, book)
-        prices = {s: float(C_ff[i, j]) for s, j in sidx.items() if np.isfinite(C_ff[i, j])}
+        if target.no_change:
+            continue
+        need = set(target.weights) | set(ledger.positions)
+        prices = {s: float(C_ff[i, sidx[s]]) for s in need if np.isfinite(C_ff[i, sidx[s]])}
         intents = allocate(target, book, prices, d, costs, cfg.allocator)
         gross = mv
         cash_avail = ledger.cash

@@ -1,7 +1,7 @@
 # Testing
 
-Run: `python -m pytest` (Windows PowerShell or Linux). The suite was executed in the build environment;
-see the README for the latest count and runtime.
+Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build environment: **81 passed in ~18 s**
+(Linux, Python 3.13). Windows is covered by the CI matrix (not yet observed running).
 
 | Layer | File | What it proves |
 |---|---|---|
