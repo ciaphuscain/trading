@@ -1,7 +1,7 @@
 # Testing
 
-Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build environment: **81 passed in ~18 s**
-(Linux, Python 3.13). GitHub Actions CI passed on windows-latest and ubuntu-latest with Python 3.11 and 3.13 (run 40253802229, commit 4ca7ef8).
+Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build environment: **97 passed in ~60 s**
+(Linux, Python 3.13; the paper-session replays dominate the runtime). GitHub Actions CI passed on windows-latest and ubuntu-latest with Python 3.11 and 3.13, including the paper-session tests (run 40279036398, commit 9a7affc).
 
 | Layer | File | What it proves |
 |---|---|---|
