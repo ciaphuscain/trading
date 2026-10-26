@@ -25,6 +25,8 @@
 16. Why a modular monolith and not microservices? (ADR 0001)
 17. How do you make experiment history tamper-evident? → hash chain.
 18. How did you optimise the backtester without risking correctness? → profile, targeted change, equality check, test suite.
+18b. How do you know the paper path and the backtest agree? → shared `plan_orders`; equivalence test; it found a split-day risk-equity bug and a buy-shrinking vs broker-reject mismatch (ADR 0007).
+18c. Why did crash recovery initially fill an order "before it was decided"? → post-close orders must be after-market orders eligible only in the next session.
 
 **Risk / ML / portfolio**
 19. Why can the risk engine veto the strategy, and why can't the strategy see it?

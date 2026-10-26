@@ -20,6 +20,7 @@ Modular monolith (single Python package, single process). Rationale: [adr/0001](
                 stats/ (metrics, PSR/DSR, PBO, bootstrap)  ◄── research/ (registry, holdout,
                                                                 walk-forward, tournament, gate)
   execution/ (orders state machine, OrderManager + SQLite journal, PaperBroker, live_guard)
+  paper/session  daily job: PaperBroker + OrderManager + the SAME plan_orders as backtest/engine
         └── uses risk/ via a callback; never imported by strategies/
 ```
 
@@ -36,7 +37,9 @@ Modular monolith (single Python package, single process). Rationale: [adr/0001](
 | Prices, actions | `MarketData` (immutable) | operator's CSV/Parquet files, identified by `version()` hash |
 | Cash, positions, journal (backtest) | `Ledger` | in memory per run; exported CSV |
 | Risk counters, drawdown halt | `RiskEngine.state` | in memory; audit JSONL optional |
-| Orders, fills (paper) | `OrderManager` | SQLite (write-ahead) |
+| Orders, fills, position adjustments (paper) | `OrderManager` | SQLite (write-ahead) |
+| Paper broker account (cash, positions, resting orders) | `PaperBroker` (plays an external system) | JSON file, atomically replaced after every mutation |
+| Paper session (risk state, position metadata, daily log) | `PaperSession` | SQLite, one transaction per session |
 | Experiments, holdout accesses, decisions | `Registry` | append-only hash-chained JSONL |
 
 ## Price-basis discipline
@@ -46,10 +49,14 @@ Modular monolith (single Python package, single process). Rationale: [adr/0001](
 (`test_adjusted_prices_are_point_in_time`).
 
 ## Two execution paths, one set of rules
-The backtester fills orders directly (fast, deterministic). The paper path goes through
-`OrderManager` → `PaperBroker` (state machine, idempotency, reconciliation). Both use the same
-`CostModel`, `RiskEngine` and `allocate`. Divergence between them is a known risk; Phase 5's daily
-paper job will log model-vs-paper fill differences (see REQUIREMENTS P1-11).
+The backtester fills orders directly (fast, deterministic). The paper path (`omega/paper/session.py`)
+goes through `OrderManager` → `PaperBroker` (state machine, idempotency, write-ahead persistence,
+reconciliation). Both call the **same** `plan_orders` (strategy → allocator → risk engine), `CostModel`
+and `SlippageModel`. `tests/test_paper.py` asserts that a day-by-day paper run reproduces the backtest
+equity curve to 1e-6 INR for every strategy. Building it found three real defects — two in the
+backtester, one in the paper path (ADR 0007).
+Remaining intentional difference: the paper broker has no volume-participation cap (a real broker
+fills what the market gives); each paper fill logs its model price and divergence in bps.
 
 ## Evolution plan
 | Version | Trigger to move on | New complexity |
@@ -57,6 +64,6 @@ paper job will log model-vs-paper fill differences (see REQUIREMENTS P1-11).
 | V0 (done) minimal backtester | – | – |
 | V1 (this repo) reproducible multi-strategy research | real data loaded | – |
 | V2 cost-aware optimisation + robust validation | a candidate passes the gate on real data | integer allocation, regime filters |
-| V3 paper-trading daily job | V2 candidate exists | scheduler entry, state DB, alerts |
+| V3 paper-trading daily job (built: `omega paper`, `scripts/paper_daily.ps1`) | V2 candidate exists | scheduler entry, state DB, alerts |
 | V4 research orchestration / model registry | ML shows incremental OOS value | MLflow or equivalent |
 | V5 multi-market/broker | separate legal + operational review | adapters, FX, calendars |

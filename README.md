@@ -16,8 +16,9 @@ Evidence-first quantitative research and **paper-trading** platform for a ₹5,0
   reversion, Donchian breakout) against cash and buy-and-hold with walk-forward OOS selection, a locked
   holdout, a tamper-evident trial registry, Deflated Sharpe Ratio, PBO (CSCV), bootstrap CIs and a mechanical
   promotion gate whose default answer is **"hold cash"**.
-* Provides the paper-execution core: order state machine, idempotent write-ahead order manager, simulated
-  broker with failure injection, reconciliation, independent risk engine with kill switch.
+* Runs a restartable **daily paper-trading job** (`omega paper`) through an order state machine, idempotent
+  write-ahead order manager, simulated broker, reconciliation and an independent risk engine with kill switch.
+  It uses the backtester's exact decision code and is tested to reproduce the backtest equity curve to the paisa.
 
 ## Key findings so far (synthetic data — see [docs/EXPERIMENT_LOG.md](docs/EXPERIMENT_LOG.md))
 * A ₹2,500 delivery round trip costs ≈ ₹22.5 (0.90%), mostly the DP charge (hand-checked in tests).
@@ -37,6 +38,9 @@ python -m omega backtest   --synthetic --strategy M1_xs_momentum --param lookbac
 python -m omega tournament --synthetic --out results\demo          # ~25 s
 python -m omega tournament --data path\to\data --holdout-start 2024-01-01 --registry runs\registry.jsonl
 python -m omega registry   --registry runs\registry.jsonl
+python -m omega paper      --synthetic --strategy M1_xs_momentum --state runs\paper_demo   # daily paper job
+python -m omega fetch-nse  --start 2015-01-01 --cache data_store\bhavcopy                  # read NSE terms first
+python -m omega build-bars --cache data_store\bhavcopy --out data_store\nse
 ```
 Data directory format: `bars.csv` (date,symbol,open,high,low,close,volume), optional `actions.csv`
 (symbol,ex_date,kind∈{split,dividend},value), optional `benchmark.csv` (date,close).
@@ -52,6 +56,7 @@ omega/backtest     reference event-driven engine
 omega/stats        metrics, PSR/DSR, PBO, bootstrap, multiple testing
 omega/research     registry, holdout lock, walk-forward, tournament, promotion gate
 omega/execution    order state machine, order manager, paper broker, live guard
+omega/paper        daily paper-trading session (restartable, crash-safe)
 tests/             unit, property, look-ahead, integration, failure-injection tests
 scripts/           reproducible experiments
 docs/              specification, methods, assumptions, ADRs, logs
@@ -62,22 +67,23 @@ docs/              specification, methods, assumptions, ADRs, logs
 |---|---|
 | 0 Feasibility | ✔ docs: [PROJECT_SPEC](docs/PROJECT_SPEC.md), [ASSUMPTIONS](docs/ASSUMPTIONS.md), [DATA_SOURCES](docs/DATA_SOURCES.md), [RESEARCH_METHODS](docs/RESEARCH_METHODS.md) |
 | 1 Research foundation | ✔ data model, validation, cost engine, reference backtester, invariants, baselines |
-| 2 Strategy tournament | ✔ M1/M2/R1/B1, walk-forward, sensitivity grid stats, registry — **on synthetic data only** |
-| 3 Optimisation | partial: cost-aware filter, whole-share allocator, risk budgets; regime gate in M1 |
+| 2 Strategy tournament | ✔ M1/M2/R1/B1, walk-forward, parameter-sensitivity and regime tables, registry — **on synthetic data only** |
+| 3 Optimisation | partial: cost-aware filter, whole-share allocator, risk budgets; regime gate in M1; integer optimiser deliberately not built (no evidence it helps with 1–2 slots) |
 | 4 Machine learning | not started — not justified until a Tier-1 edge exists on real data |
-| 5 Paper trading | core components ✔; daily scheduled job ☐ |
-| 6 Hardening | CI ✔, failure injection (order path) ✔; disk/DB failure tests ☐ |
+| 5 Paper trading | ✔ daily job (`omega paper`, `scripts/paper_daily.ps1`), reconciliation, risk, fill-divergence log |
+| 6 Hardening | ✔ CI (Windows + Linux, pip-audit), failure injection incl. crash, disk-full, DB lock, corruption, backups |
 | 7 Live | **not started by design** (ADR 0006) |
 
-Next step: obtain survivorship-free NSE data (bhavcopy archive + corporate actions), decide the open
-protocol question in EXPERIMENT_LOG (trade-count rule) **before** looking at real results, then run the
-tournament with a locked holdout.
+Next step (needs the operator): download real data with `omega fetch-nse` from a machine where NSE is
+reachable, add a corporate-actions file, decide the open protocol question in EXPERIMENT_LOG (trade-count
+rule) **before** looking at real results, then run the tournament with a locked holdout.
 
 Documentation index: [ARCHITECTURE](docs/ARCHITECTURE.md) · [STRATEGIES](docs/STRATEGIES.md) ·
 [BACKTEST_ASSUMPTIONS](docs/BACKTEST_ASSUMPTIONS.md) · [TRANSACTION_COSTS](docs/TRANSACTION_COSTS.md) ·
 [RISK_MODEL](docs/RISK_MODEL.md) · [SECURITY](docs/SECURITY.md) · [TESTING](docs/TESTING.md) ·
 [BENCHMARKS](docs/BENCHMARKS.md) · [REQUIREMENTS](docs/REQUIREMENTS.md) · [OPERATIONS](docs/OPERATIONS.md) ·
 [DEPLOYMENT](docs/DEPLOYMENT.md) · [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) ·
-[QUALITY_GATES](docs/QUALITY_GATES.md) · [INTERVIEW_QUESTIONS](docs/INTERVIEW_QUESTIONS.md) · [ADRs](docs/adr/)
+[QUALITY_GATES](docs/QUALITY_GATES.md) · [INTERVIEW_QUESTIONS](docs/INTERVIEW_QUESTIONS.md) ·
+[EXPERIMENT_LOG](docs/EXPERIMENT_LOG.md) · [ADRs](docs/adr/)
 
 Not financial advice. Past (let alone synthetic) performance does not predict future results.

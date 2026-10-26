@@ -23,6 +23,13 @@
 | Events: partial fills, cash reductions, rejections, write-offs | Is execution realistic? |
 | Paper: UNKNOWN orders, reconciliation breaks | Is the order path healthy? |
 
+## Daily paper job
+`python -m omega paper --data data_store\nse --strategy M1_xs_momentum --state runs\paper_m1 --backup runs\backups`
+(or register `scripts/paper_daily.ps1` with Task Scheduler; it validates data first). It processes every
+session not yet processed, so missed days are caught up; running twice is harmless. Exit code 3 = halted
+(reconciliation break), 2 = data validation failed. Review `runs\paper_daily.log` and the printed alerts.
+Inspect history in Python: `PaperSession(state_dir, strategy).history()`.
+
 ## Paper-trading incident handling
 * Reconciliation break → `OrderManager.halted` is set; compare `local_positions()` with broker positions,
   correct the cause, record an incident note, then create a new manager session.

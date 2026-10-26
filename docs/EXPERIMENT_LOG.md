@@ -5,6 +5,10 @@
 > the research machinery behaves correctly. **They say nothing about real NSE profitability, which
 > remains unmeasured** because no real data was reachable from the build environment.
 
+**Version note (v2):** all tables below were re-run after the fixes in ADR 0007 (split-day risk equity;
+unaffordable buys rejected instead of shrunk). Headline conclusions did not change (E1 0/16, E2 the same
+4/16 promoted); individual numbers moved slightly where noted, e.g. E1 seed 102 B1 OOS return +66% → +34%.
+
 Reproduce: `python scripts/run_experiments.py --out results/experiments` (raw CSVs copied to
 [`docs/experiments/`](experiments/)). Seeds 101–104, 30 symbols, 1,500 sessions (~6 years), ₹5,000,
 `discount_zero_delivery` costs, default slippage, default risk limits, walk-forward 504/126, default grids
@@ -30,10 +34,10 @@ planted) never.
 
 | seed | family | OOS return | OOS Sharpe (ann.) | DSR | PBO | OOS trades | decision / main failing rule |
 |---|---|---|---|---|---|---|---|
-| 101 | M2 | +1,122% | 2.70 | 0.993 | 0.34 | 55 | PROMOTE |
-| 101 | B1 | +655% | 2.53 | 0.996 | 0.37 | 56 | PROMOTE |
+| 101 | M2 | +1,122% | 2.70 | 0.993 | 0.33 | 55 | PROMOTE |
+| 101 | B1 | +657% | 2.53 | 0.996 | 0.37 | 55 | PROMOTE |
 | 101 | M1 | +963% | 2.53 | 0.56 | 0.00 | 17 | REJECT: DSR, trades < 30 |
-| 102 | M2 / B1 | +1,860% / +1,171% | 2.73 / 2.48 | ≥ 0.994 | ≤ 0.28 | 46 / 42 | PROMOTE |
+| 102 | M2 / B1 | +1,902% / +1,171% | 2.75 / 2.48 | ≥ 0.994 | ≤ 0.28 | 45 / 42 | PROMOTE |
 | 103 | B1 | +463% | 1.89 | 0.91 | 0.31 | 62 | REJECT: DSR < 0.95 |
 | 104 | M2 | +376% | 1.73 | 0.85 | 0.03 | 74 | REJECT: DSR < 0.95 |
 
@@ -64,9 +68,9 @@ CAGR by cost regime ("frictionless" = zero charges and zero slippage; "stress" =
 | null | M2 trend | +2.7% | **−5.6%** | −1.0% | 2,021 | 98 |
 | null | R1 mean reversion | +0.7% | **−14.9%** | −1.0% | 2,924 | 154 |
 | null | Buy & hold | −3.0% | −3.0% | −2.9% | 4 | 0 |
-| planted | M2 trend | +67.0% | +59.9% | +24.6% | 2,873 | 71 |
+| planted | M2 trend | +67.4% | +60.7% | +24.6% | 2,887 | 70 |
 | planted | M1 momentum | +64.5% | +62.9% | +26.7% | 1,293 | 26 |
-| planted | B1 breakout | +51.4% | +46.1% | −0.9% | 2,218 | 68 |
+| planted | B1 breakout | +51.2% | +46.1% | −0.9% | 2,218 | 68 |
 | planted | R1 mean reversion | +7.1% | **−14.8%** | −1.0% | 3,396 | 175 |
 
 Ranking changes: on the null market M2 falls from 2nd (frictionless) to 4th (realistic), behind buy-and-hold;
@@ -82,11 +86,11 @@ markets with realistic costs: its gross edge is ≈ 0 and charges consume the ac
 | M1 momentum | 50,000 | 40 | 3,029 | 533 | 0.9% |
 | M1 momentum | 5,00,000 | 39 | 21,985 | 520 | 0.7% |
 | B1 breakout | 5,000 | 76 | 1,616 | 1,026 | **4.8%** |
-| B1 breakout | 50,000 | 77 | 6,320 | 1,033 | 1.6% |
+| B1 breakout | 50,000 | 79 | 6,268 | 1,067 | 1.7% |
 | B1 breakout | 5,00,000 | 76 | 48,553 | 1,026 | 1.2% |
 | R1 mean reversion | 5,000 | 174* | 3,271 | 2,342 | **18.0%** |
 | R1 mean reversion | 50,000 | 364 | 19,917 | 4,907 | 8.7% |
-| R1 mean reversion | 5,00,000 | 375 | 1,39,878 | 5,063 | 6.1% |
+| R1 mean reversion | 5,00,000 | 373 | 1,35,613 | 5,029 | 6.0% |
 
 \* fewer trades at ₹5k because the drawdown breaker halted buying for cooldown periods.
 DP charges are a fixed ₹15.93 per exit, so their weight falls tenfold with each tenfold increase in capital;
@@ -94,6 +98,12 @@ at ₹5k they are the majority of all explicit charges. Percentage costs (STT, s
 
 ## E5 — Performance
 See [BENCHMARKS.md](BENCHMARKS.md).
+
+## E6 — Paper session vs backtest (equivalence)
+Day-by-day `PaperSession` runs (order manager + paper broker + reconciliation) on synthetic data
+(10–12 symbols, 380–500 sessions, planted momentum) reproduce the backtester's equity curve with maximum
+absolute difference **0.0 INR** for all four strategies, including stops, gap stops, a split and a dividend
+(`tests/test_paper.py`). Before the fixes in ADR 0007 the maximum difference was ₹1,873 (B1) and ₹15 (R1).
 
 ## Decisions taken from these experiments
 1. Keep the conservative gate unchanged; record the low-turnover/trade-count tension as an open item (above).

@@ -14,6 +14,7 @@ Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build env
 | Research protocol | `tests/test_research.py` | registry tamper detection; holdout lock; walk-forward bookkeeping; gate; null-market tournament promotes nothing |
 | Risk engine | `tests/test_risk.py` | each rule, kill switch file + manual with audit, drawdown cooldown/re-arm |
 | Execution / failure injection | `tests/test_execution.py` | see table below |
+| Paper trading | `tests/test_paper.py` | day-by-day paper run == backtest equity (all 4 strategies); restart; crash before commit recovers without duplicates; kill-switch file; backup; corrupted DB refused |
 
 ## Failure injection
 | Failure | Expected | Observed (test) | Recovery | Residual risk |
@@ -29,4 +30,9 @@ Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build env
 | Stale data | risk rejects | ✔ | – | – |
 | Sudden gap through stop | fill at open | ✔ | – | gaps larger than modelled slippage |
 | Fee change | new dated schedule row | ✔ dated lookup test | – | operator must update YAML |
-| Disk full / DB lock / model corruption | not yet tested | ☐ | – | open item (Phase 6) |
+| Disk full while persisting (write-ahead fails) | order never reaches the broker | ✔ `test_write_ahead_failure_prevents_broker_submission` | retry after freeing space | – |
+| Database locked by another process | error surfaces, no broker call | ✔ `test_database_lock_surfaces_instead_of_silently_trading` | rerun job | two schedulers running at once (avoid) |
+| Corrupted state database | integrity check refuses to start | ✔ `test_backup_and_integrity_check` | restore from `--backup` copy | backups must exist |
+| Crash after orders sent, before end-of-day commit | rerun reproduces the uninterrupted result, no duplicate orders | ✔ `test_crash_before_end_of_day_commit_recovers_without_duplicates` | rerun job | – |
+| Acknowledged order disappears at broker | halt | ✔ `test_acknowledged_order_vanishing_at_broker_halts` | human review | – |
+| Model file corruption | n/a (no ML models yet) | – | – | Phase 4 |

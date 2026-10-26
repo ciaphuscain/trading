@@ -23,6 +23,8 @@ data hosts), so no regulatory or tariff fact is marked VERIFIED.
 | A-D1 | Forward total-return adjustment is used for signals | DESIGN | data/market.py | – |
 | A-D2 | Dividends credited on the ex-date (actual payment is later); TDS ignored | DESIGN (simplification) | engine | – |
 | A-D3 | Bhavcopy column names (legacy and UDiFF) as in `sources.py` | UNVERIFIED | sources.py | download a current file |
+| A-D7 | NSE archive URL patterns and the UDiFF switch date (2024-07-08) in `nse_archive.py` | UNVERIFIED | downloader | try one day manually |
+| A-X1 | Orders placed after the close behave as after-market orders filled at the next open; unaffordable cash-account buys are rejected by the broker, not reduced | UNVERIFIED (typical RMS behaviour) | backtest + paper broker | broker documentation |
 | A-D4 | Missing bar = not tradable that session | DESIGN | engine | – |
 | A-D5 | No bar for 10 sessions = delisted; written off at 50% of last close | HYPOTHESIS | engine | delisting outcomes study |
 | A-D6 | Fractional split entitlements paid as cash at the ex-date open | DESIGN (approximation) | ledger | – |

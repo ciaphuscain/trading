@@ -17,12 +17,12 @@ P4 experimental · REJECT. ✔ = implemented and tested in this repository.
 | P0-10 | Locked holdout with audited access | P0 | ✔ | prevents silent contamination |
 | P0-11 | Walk-forward OOS, DSR, PBO, bootstrap CI, promotion gate | P0 | ✔ | overfitting defence |
 | P0-12 | Order state machine, idempotency, UNKNOWN state, reconciliation, no-live guarantee | P0 | ✔ | duplicate/ambiguous orders |
-| P1-1 | Real NSE data ingestion: bhavcopy downloader + corporate-action table + ISIN mapping | P1 | parser ✔, downloader ☐ | nothing can be concluded without it |
-| P1-2 | Parameter sensitivity heat-maps / plateau metric | P1 | grid stats ✔, plots ☐ | stability evidence |
-| P1-3 | Regime-split performance tables (trend/vol regimes) | P1 | ☐ | robustness |
-| P1-4 | Daily paper-trading job (Task Scheduler) using OrderManager + PaperBroker + SQLite | P1 | components ✔, job ☐ | Phase 5 |
-| P1-5 | Model-vs-paper fill divergence log | P1 | ☐ | validate slippage assumptions |
-| P1-6 | CI on Windows + Linux | P1 | ✔ (workflow file) | Windows is the target OS |
+| P1-1 | Real NSE data ingestion: bhavcopy downloader + corporate-action table + ISIN mapping | P1 | parser ✔, downloader ✔ (fake-fetcher tested; live endpoint unverified), actions table ☐, ISIN ☐ | nothing can be concluded without it |
+| P1-2 | Parameter sensitivity tables / plateau check | P1 | ✔ (per-parameter marginal Sharpe in every report) | stability evidence |
+| P1-3 | Regime-split performance tables (trend/vol regimes) | P1 | ✔ (causal threshold regimes, OOS breakdown in report) | robustness |
+| P1-4 | Daily paper-trading job (Task Scheduler) using OrderManager + PaperBroker + SQLite | P1 | ✔ `omega paper`, `scripts/paper_daily.ps1` | Phase 5 |
+| P1-5 | Model-vs-paper fill divergence log | P1 | ✔ per fill (`divergence_bps`); meaningful only with a real broker | validate slippage assumptions |
+| P1-6 | CI on Windows + Linux | P1 | ✔ (observed passing on GitHub Actions) | Windows is the target OS |
 | P1-7 | Nifty 50 TRI benchmark ingestion | P1 | loader ✔ (`benchmark.csv`) | required comparison |
 | P2-1 | Cost-aware integer portfolio optimisation (vs equal-weight) | P2 | ☐ | only 1–2 slots; benefit unproven |
 | P2-2 | Regime classifier (thresholds first) | P2 | trend gate ✔ | add only with demonstrated value |

@@ -38,8 +38,14 @@ corporate action (likely unrecorded split), invalid actions, gaps > 10 sessions 
 WARN: weekend sessions (NSE holds special sessions), stale flat zero-volume runs, short gaps,
 series ending early (possible delisting/suspension), actions for unknown symbols.
 
+## Downloader (`omega/data/nse_archive.py`)
+`python -m omega fetch-nse --start 2010-01-01 --cache data_store/bhavcopy` then
+`python -m omega build-bars --cache data_store/bhavcopy --out data_store/nse`.
+Immutable per-day cache, ≥2 s between requests (default), weekday 404s remembered as probable holidays,
+non-zip responses (e.g. a block page) raise. URL patterns for the legacy and UDiFF archives are
+**UNVERIFIED** (A-D7) and the module was only tested with a fake fetcher. Read NSE's terms of use first.
+
 ## Known gaps / next steps
-* Build a bhavcopy downloader respecting NSE terms (rate limits, caching) — operator-run, outside CI.
 * Build the corporate-action table from NSE announcements; cross-check with large raw jumps.
 * Symbol changes (renames) need an ISIN-keyed mapping; UDiFF files carry ISIN — prefer ISIN as the
   instrument id. Not implemented yet (P1).

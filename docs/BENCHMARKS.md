@@ -28,6 +28,22 @@ A full default tournament (6 baselines + 68 grid configurations + walk-forward +
    correctness over speed. `BacktestConfig(check_invariants=False)` exists for large sweeps *after* a
    configuration has been validated with checks on (measured: 0.33 s → 0.26 s for M1).
 
+## Re-measurement after the Phase 5 refactor (`scripts/run_experiments.py --only 5`, v2)
+| Universe | Sessions | Strategy | Median wall time | Symbol-sessions/s | Peak memory |
+|---|---|---|---|---|---|
+| 30 | 1,500 | M1 | 0.18 s | 257k | 3.1 MB |
+| 30 | 1,500 | B1 | 0.24 s | 184k | 5.3 MB |
+| 100 | 2,500 | M1 | 0.43 s | 587k | 16 MB |
+| 100 | 2,500 | B1 | 0.73 s | 342k | 29 MB |
+| 200 | 2,500 | M1 | 0.70 s | 710k | 32 MB |
+| 200 | 2,500 | B1 | 0.92 s | 545k | 58 MB |
+| 10 | 400 | M1 strict-PIT reference vs fast | 2.03 s vs 0.05 s | – | – |
+
+Run-to-run variation on the shared build container is roughly ±30% (compare the 0.33 s / 0.50 s ad-hoc
+measurements above with 0.43 s / 0.73 s here); treat single-digit-percent differences as noise.
+Paper session: a full day-by-day paper replay of 500 sessions × 12 symbols took 3.5–7 s (it re-reads and
+persists state every session), i.e. ~10 ms per daily run — irrelevant for a once-a-day job.
+
 ## Conclusion
 Research iteration speed is not a bottleneck at NSE-EOD scale (≈2,000 liquid symbols × 15 years would be
 ~ 1–2 minutes per configuration single-threaded). No Numba/vectorbt/parallelism is justified yet; the next
