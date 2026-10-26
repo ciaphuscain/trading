@@ -18,3 +18,12 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest -q
       - run: python -m omega costs --value 2500 --date 2025-06-02
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e . pip-audit
+      - run: pip-audit --skip-editable

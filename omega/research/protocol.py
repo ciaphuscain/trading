@@ -119,6 +119,28 @@ def walk_forward(family: str, factory, configs: list[dict], data: MarketData, *,
     return WalkForwardResult(family, configs, runs, fdf, oos_r, R, pbo, gstats)
 
 
+def sensitivity_table(wf: "WalkForwardResult") -> pd.DataFrame:
+    """Marginal full-period Sharpe for each value of each parameter across the grid.
+
+    A robust strategy shows a plateau (similar Sharpe across neighbouring values); a spike at
+    one value is a warning sign of overfitting. Uses the same runs as the walk-forward, so it
+    costs no extra trials.
+    """
+    sr = wf.returns_matrix.apply(period_sharpe) * math.sqrt(252)
+    rows = []
+    keys = sorted({k for c in wf.configs for k in c})
+    for k in keys:
+        vals = sorted({repr(c.get(k)) for c in wf.configs})
+        if len(vals) < 2:
+            continue
+        for v in vals:
+            idx = [i for i, c in enumerate(wf.configs) if repr(c.get(k)) == v]
+            x = sr.iloc[idx]
+            rows.append({"param": k, "value": v, "n": len(idx), "sharpe_mean": float(x.mean()),
+                         "sharpe_min": float(x.min()), "sharpe_max": float(x.max())})
+    return pd.DataFrame(rows)
+
+
 def _clean(d: dict) -> dict:
     out = {}
     for k, v in d.items():

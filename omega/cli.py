@@ -136,6 +136,27 @@ def cmd_paper(args):
     return 3 if last["halted"] else 0
 
 
+def cmd_fetch_nse(args):
+    from .data.nse_archive import download_range
+
+    print("Check NSE's terms of use before downloading. Rate limit:", args.min_interval, "s/request")
+    stats = download_range(args.start, args.end, args.cache, min_interval=args.min_interval)
+    print(json.dumps(stats, indent=2))
+    return 0
+
+
+def cmd_build_bars(args):
+    from .data.nse_archive import build_bars
+
+    bars = build_bars(args.cache)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    bars.to_csv(out / "bars.csv", index=False)
+    print(f"wrote {len(bars):,} bars for {bars.symbol.nunique():,} symbols to {out / 'bars.csv'}; "
+          "add actions.csv (splits/bonuses/dividends) before research - see docs/DATA_SOURCES.md")
+    return 0
+
+
 def cmd_registry(args):
     from .research.registry import Registry
 
@@ -190,6 +211,18 @@ def main(argv=None) -> int:
     p.add_argument("--broker", default="discount_zero_delivery")
     p.add_argument("--backup", help="directory for a timestamped state backup after the run")
     p.set_defaults(fn=cmd_paper)
+
+    p = sub.add_parser("fetch-nse", help="download NSE bhavcopy archives into a local cache (operator-run)")
+    p.add_argument("--start", required=True)
+    p.add_argument("--end", default=str(pd.Timestamp.today().date()))
+    p.add_argument("--cache", default="data_store/bhavcopy")
+    p.add_argument("--min-interval", type=float, default=2.0)
+    p.set_defaults(fn=cmd_fetch_nse)
+
+    p = sub.add_parser("build-bars", help="convert cached bhavcopies to bars.csv")
+    p.add_argument("--cache", default="data_store/bhavcopy")
+    p.add_argument("--out", default="data_store/nse")
+    p.set_defaults(fn=cmd_build_bars)
 
     p = sub.add_parser("registry", help="verify the experiment registry hash chain")
     p.add_argument("--registry", default="runs/registry.jsonl")

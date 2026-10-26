@@ -14,7 +14,9 @@ from ..backtest.engine import BacktestConfig, run_backtest
 from ..data.market import MarketData
 from ..stats import metrics as M
 from ..strategies.library import REGISTRY
-from .protocol import GateConfig, evidence_for, grid, period_sharpe, promotion_gate, walk_forward
+from ..stats.regimes import market_regimes, regime_table
+from .protocol import (GateConfig, evidence_for, grid, period_sharpe, promotion_gate, sensitivity_table,
+                       walk_forward)
 from .registry import Registry
 
 DEFAULT_GRIDS: dict[str, list[dict]] = {
@@ -92,6 +94,20 @@ def run_tournament(data: MarketData, *, cfg: BacktestConfig = BacktestConfig(), 
         base_rows.append({"strategy": name, **{k: s[k] for k in ("profit_inr", "cagr", "sharpe", "max_drawdown",
                                                                  "n_trades", "fees_inr", "turnover_annual",
                                                                  "win_rate", "profit_factor", "avg_exposure")}})
+    regimes = market_regimes(data)
+    reg_rows, sens_rows = [], []
+    for name, wf in families.items():
+        if len(wf.oos_returns):
+            t = regime_table(wf.oos_returns, regimes)
+            t.insert(0, "family", name)
+            reg_rows.append(t)
+        st = sensitivity_table(wf)
+        st.insert(0, "family", name)
+        sens_rows.append(st)
+    t = regime_table(bh_r[bh_r.index >= min((wf.oos_returns.index.min() for wf in families.values()
+                                              if len(wf.oos_returns)), default=bh_r.index[0])], regimes)
+    t.insert(0, "family", "BH_buy_and_hold")
+    reg_rows.append(t)
     any_promoted = any(d == "PROMOTE_TO_PAPER" for d, _ in decisions.values())
     return {
         "data_version": data.version(),
@@ -105,6 +121,8 @@ def run_tournament(data: MarketData, *, cfg: BacktestConfig = BacktestConfig(), 
         "walk_forward": pd.DataFrame(rows),
         "decisions": decisions,
         "families": families,
+        "regimes": pd.concat(reg_rows, ignore_index=True) if reg_rows else pd.DataFrame(),
+        "sensitivity": pd.concat(sens_rows, ignore_index=True) if sens_rows else pd.DataFrame(),
         "recommendation": ("Paper-trade the promoted candidate(s) only; live trading requires separate review."
                            if any_promoted else
                            "No candidate survived validation. Recommended action: hold cash or a passive index fund."),
@@ -154,6 +172,13 @@ def write_report(out: dict, path: str | Path, *, synthetic: bool) -> Path:
         "* Returns are net of modelled charges and slippage, pre-tax.", "",
         "## Baselines (default parameters, full period, in-sample)", "", _fmt(out["baselines"]), "",
         "## Walk-forward out-of-sample results", "", _fmt(out["walk_forward"]), "",
+        "## Out-of-sample performance by market regime", "",
+        "Regime known at the previous close (causal): trend = market index vs 200-session SMA; "
+        "volatility = 63-session realised vol vs its expanding median.", "",
+        _fmt(out["regimes"]) if len(out["regimes"]) else "(not enough data)", "",
+        "## Parameter sensitivity (full-period Sharpe by parameter value, all grid runs)", "",
+        "Look for plateaus; a spike at a single value suggests overfitting.", "",
+        _fmt(out["sensitivity"]) if len(out["sensitivity"]) else "(no varying parameters)", "",
         "## Decisions", "",
     ]
     for fam, (dec, reasons) in out["decisions"].items():
@@ -162,6 +187,9 @@ def write_report(out: dict, path: str | Path, *, synthetic: bool) -> Path:
     (p / "report.md").write_text("\n".join(md), encoding="utf-8")
     out["baselines"].to_csv(p / "baselines.csv", index=False)
     out["walk_forward"].to_csv(p / "walk_forward.csv", index=False)
-    summary = {k: v for k, v in out.items() if k not in ("baselines", "walk_forward", "families")}
+    out["regimes"].to_csv(p / "regimes.csv", index=False)
+    out["sensitivity"].to_csv(p / "sensitivity.csv", index=False)
+    summary = {k: v for k, v in out.items()
+               if k not in ("baselines", "walk_forward", "families", "regimes", "sensitivity")}
     (p / "summary.json").write_text(json.dumps(_clean_nested(summary), indent=2, default=str), encoding="utf-8")
     return p / "report.md"

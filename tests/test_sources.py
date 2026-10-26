@@ -33,3 +33,46 @@ def test_bhavcopy_legacy_and_udiff_layouts(tmp_path):
     pd.DataFrame({"foo": [1]}).to_csv(tmp_path / "bad.csv", index=False)
     with pytest.raises(ValueError):
         read_bhavcopy(tmp_path / "bad.csv")
+
+
+def _zip_csv(df: pd.DataFrame, name: str) -> bytes:
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr(name, df.to_csv(index=False))
+    return buf.getvalue()
+
+
+def test_bhavcopy_downloader_caches_rate_limits_and_records_holidays(tmp_path):
+    from omega.data.nse_archive import build_bars, download_range
+
+    calls, sleeps = [], []
+
+    def fake_fetch(url):
+        calls.append(url)
+        if "20250102" in url or "02JAN2025" in url:  # pretend 2 Jan is a holiday: both URLs 404
+            return None
+        day = "2025-01-01" if ("20250101" in url) else "2025-01-03"
+        df = pd.DataFrame({"TradDt": [day] * 2, "TckrSymb": ["ABC", "XYZ"], "SctySrs": ["EQ", "BE"],
+                           "OpnPric": [1, 2], "HghPric": [1, 2], "LwPric": [1, 2], "ClsPric": [1, 2],
+                           "TtlTradgVol": [10, 20]})
+        return _zip_csv(df, "bhav.csv")
+
+    s1 = download_range("2025-01-01", "2025-01-03", tmp_path, fetch=fake_fetch, min_interval=1.0,
+                        sleep=sleeps.append)
+    assert s1 == {"fetched": 2, "cached": 0, "no_file": 1, "requests": 4}
+    assert sleeps and all(0 < w <= 1.0 for w in sleeps)  # rate limiter engaged between requests
+    n = len(calls)
+    s2 = download_range("2025-01-01", "2025-01-03", tmp_path, fetch=fake_fetch, sleep=sleeps.append)
+    assert len(calls) == n and s2["cached"] == 2 and s2["no_file"] == 1  # nothing re-requested
+    bars = build_bars(tmp_path)
+    assert bars.symbol.tolist() == ["ABC", "ABC"] and bars.date.nunique() == 2
+
+
+def test_downloader_rejects_non_zip_response(tmp_path):
+    from omega.data.nse_archive import download_range
+
+    with pytest.raises(ValueError):
+        download_range("2025-01-01", "2025-01-01", tmp_path, fetch=lambda u: b"<html>blocked</html>", sleep=lambda s: None)

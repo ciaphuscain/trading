@@ -88,3 +88,28 @@ def test_cash_strategy_is_exactly_flat():
     md = synthetic_market(n_symbols=5, n_days=300, seed=1)
     r = run_backtest(REGISTRY["C1_cash"](), md)
     assert (r.equity == 5000.0).all() and r.fills.empty
+
+
+def test_regime_labels_are_causal_and_table_partitions_returns():
+    from omega.stats.regimes import market_regimes, regime_table
+
+    md = synthetic_market(n_symbols=8, n_days=600, seed=3)
+    full = market_regimes(md)
+    part = market_regimes(md.truncate(400))
+    pd.testing.assert_frame_equal(full.iloc[:400], part)
+    r = run_backtest(REGISTRY["BH_buy_and_hold"](), md).returns()
+    t = regime_table(r, full)
+    for dim in ("trend", "vol"):
+        assert t[t.dimension == dim].days.sum() <= len(r)
+        assert set(t[t.dimension == dim].regime) <= {"up", "down", "high_vol", "low_vol"}
+
+
+def test_sensitivity_table_covers_each_parameter_value():
+    from omega.research.protocol import sensitivity_table
+
+    md = synthetic_market(n_symbols=8, n_days=500, seed=8)
+    g = grid(lookback=[40, 80], skip=[0, 5], top_n=[2])
+    wf = walk_forward("M1", CrossSectionalMomentum, g, md, train_days=250, test_days=125)
+    t = sensitivity_table(wf)
+    assert set(t.param) == {"lookback", "skip"}  # top_n does not vary
+    assert (t.n == 2).all()
