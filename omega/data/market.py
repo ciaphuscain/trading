@@ -119,17 +119,22 @@ class MarketData:
         return build_market_data(raw, acts, bench, self.source, dict(self.meta))
 
     def version(self) -> str:
-        """Content hash identifying this exact dataset (prices + actions)."""
+        """Content hash identifying this exact dataset (prices + actions + benchmark).
+
+        Values are canonicalised (dates as ISO strings, numbers rounded to 1e-6) so the
+        hash is stable across storage formats (CSV vs Parquet) and pandas dtype changes.
+        """
         h = hashlib.sha256()
+        h.update("|".join(d.strftime("%Y-%m-%d") for d in self.dates).encode())
+        h.update("|".join(map(str, self.symbols)).encode())
         for f in FIELDS:
-            df = self.raw.field(f)
+            vals = np.round(self.raw.field(f).to_numpy(dtype=float), 6)
             h.update(f.encode())
-            h.update(pd.util.hash_pandas_object(df, index=True).values.tobytes())
-            h.update("|".join(map(str, df.columns)).encode())
-        if len(self.actions):
-            h.update(pd.util.hash_pandas_object(self.actions.reset_index(drop=True), index=False).values.tobytes())
+            h.update(np.nan_to_num(vals, nan=-1.0).tobytes())
+        for a in self.actions.itertuples(index=False):
+            h.update(f"{a.symbol}|{pd.Timestamp(a.ex_date).date()}|{a.kind}|{float(a.value):.6f}".encode())
         if self.benchmark is not None:
-            h.update(pd.util.hash_pandas_object(self.benchmark, index=True).values.tobytes())
+            h.update(np.nan_to_num(np.round(self.benchmark.to_numpy(dtype=float), 6), nan=-1.0).tobytes())
         return h.hexdigest()[:16]
 
 

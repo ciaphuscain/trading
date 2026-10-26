@@ -38,6 +38,7 @@ from ..strategies.base import BookView, Holding, Strategy
 class BacktestConfig:
     initial_cash: float = 5000.0
     broker: str = "discount_zero_delivery"
+    cost_schedule: str | None = None  # None = bundled NSE delivery schedule
     slippage: SlippageModel = field(default_factory=SlippageModel)
     allocator: AllocatorConfig = field(default_factory=AllocatorConfig)
     risk: RiskLimits = field(default_factory=RiskLimits)
@@ -100,7 +101,7 @@ def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = Bac
         if pos < n and a.symbol in sidx:
             actions_at[pos].append(a)
 
-    costs = CostModel(cfg.broker)
+    costs = CostModel(cfg.broker, cfg.cost_schedule)
     slip = cfg.slippage
     ledger = Ledger(cfg.initial_cash)
     risk = RiskEngine(cfg.risk, cfg.initial_cash)
@@ -285,7 +286,8 @@ def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = Bac
         costs=cost_tot,
         data_version=data.version(),
         cost_version=costs.version_id(dates[-1]),
-        config={"initial_cash": cfg.initial_cash, "broker": cfg.broker, "slippage": asdict(cfg.slippage),
+        config={"initial_cash": cfg.initial_cash, "broker": cfg.broker, "cost_schedule": costs.schedule_path,
+                "slippage": asdict(cfg.slippage),
                 "allocator": asdict(cfg.allocator), "risk": asdict(cfg.risk), "delist_after": cfg.delist_after,
                 "delist_recovery": cfg.delist_recovery},
     )

@@ -1,0 +1,22 @@
+# RESEARCH REFERENCE ONLY: a frictionless schedule used to measure how much of a
+# strategy's gross edge is consumed by charges. Never use for decisions.
+statutory:
+  - effective_from: "1990-01-01"
+    stt_buy: 0.0
+    stt_sell: 0.0
+    stt_rounding: none
+    exchange_txn: 0.0
+    sebi_fee: 0.0
+    stamp_buy: 0.0
+    gst: 0.0
+    status: HYPOTHETICAL
+    source: "Frictionless reference"
+brokers:
+  discount_zero_delivery:
+    - effective_from: "1990-01-01"
+      brokerage_pct: 0.0
+      brokerage_flat: 0.0
+      brokerage_cap: 0.0
+      dp_per_scrip_sell_day: 0.0
+      status: HYPOTHETICAL
+      source: "Frictionless reference"
