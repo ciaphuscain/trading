@@ -94,7 +94,7 @@ class CostModel:
             brokerage = min(brokerage, b["brokerage_cap"])
         stt_rate = s["stt_buy"] if side == "BUY" else s["stt_sell"]
         stt = value * stt_rate
-        stt = float(round(stt)) if s.get("stt_rounding") == "rupee" else stt
+        stt = float(math.floor(stt + 0.5)) if s.get("stt_rounding") == "rupee" else stt  # half-up, not banker's
         exch = value * s["exchange_txn"]
         sebi = value * s["sebi_fee"]
         stamp = value * s["stamp_buy"] if side == "BUY" else 0.0
