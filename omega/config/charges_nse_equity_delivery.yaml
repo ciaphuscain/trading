@@ -1,0 +1,68 @@
+# NSE cash-equity DELIVERY (CNC) charge schedule.
+#
+# Every rate is a dated, sourced HYPOTHESIS. status: UNVERIFIED means the value is
+# from the author's knowledge of published circulars/broker pages and MUST be checked
+# against the primary source before any decision with money at stake.
+# Rates are fractions of traded value unless stated otherwise.
+# A version applies to trades on or after `effective_from` until the next version.
+
+statutory:
+  - effective_from: "2008-01-01"
+    stt_buy: 0.001
+    stt_sell: 0.001
+    stt_rounding: rupee
+    exchange_txn: 0.0000325 # approx.; NSE revised this several times before 2020
+    sebi_fee: 0.000001      # was INR 15/crore for part of this period; approximation
+    stamp_buy: 0.0001       # state-dependent before Jul 2020 (~0.01% typical); approximation
+    gst: 0.18               # 15% service tax before Jul 2017; approximation
+    status: APPROXIMATE
+    source: "Pre-2020 charges varied by state and date; this row is a single conservative approximation for long backtests."
+  - effective_from: "2020-07-01"
+    stt_buy: 0.001          # Securities Transaction Tax, delivery buy 0.1%
+    stt_sell: 0.001         # delivery sell 0.1%
+    stt_rounding: rupee     # STT is levied rounded to the nearest rupee (per contract note)
+    exchange_txn: 0.0000322 # NSE transaction charge (approx., 0.00322%)
+    sebi_fee: 0.000001      # SEBI turnover fee, INR 10 per crore
+    stamp_buy: 0.00015      # Stamp duty on delivery buy, 0.015% (Indian Stamp Act amendment, 1 Jul 2020)
+    gst: 0.18               # GST on brokerage + exchange txn + SEBI fee (+ DP charges)
+    status: UNVERIFIED
+    source: "SEBI/NSE circulars; Finance Act 2019 stamp duty amendment. Verify on nseindia.com."
+  - effective_from: "2024-10-01"
+    stt_buy: 0.001
+    stt_sell: 0.001
+    stt_rounding: rupee
+    exchange_txn: 0.0000297 # NSE uniform transaction charge from 1 Oct 2024 (SEBI 'true-to-label' circular)
+    sebi_fee: 0.000001
+    stamp_buy: 0.00015
+    gst: 0.18
+    status: UNVERIFIED
+    source: "NSE circular on revised transaction charges effective 2024-10-01. Verify."
+
+brokers:
+  # Typical discount-broker structure: zero delivery brokerage, DP charge per scrip per sell day.
+  discount_zero_delivery:
+    - effective_from: "2015-01-01"
+      brokerage_pct: 0.0
+      brokerage_flat: 0.0
+      brokerage_cap: 0.0
+      dp_per_scrip_sell_day: 13.5   # INR, before GST (depository + broker DP fee)
+      status: UNVERIFIED
+      source: "Published pricing pages of large Indian discount brokers. Verify for your broker."
+  # Conservative alternative: flat INR 20 or 0.1% per executed order, whichever is lower.
+  flat_20_or_0p1pct:
+    - effective_from: "2015-01-01"
+      brokerage_pct: 0.001
+      brokerage_flat: 20.0
+      brokerage_cap: 20.0
+      dp_per_scrip_sell_day: 13.5
+      status: UNVERIFIED
+      source: "Common Indian broker tariff shape. Verify for your broker."
+  # Stress profile used for sensitivity analysis only.
+  stress_high_cost:
+    - effective_from: "2015-01-01"
+      brokerage_pct: 0.003
+      brokerage_flat: 0.0
+      brokerage_cap: 0.0
+      dp_per_scrip_sell_day: 20.0
+      status: HYPOTHETICAL
+      source: "Sensitivity analysis profile, not a real tariff."

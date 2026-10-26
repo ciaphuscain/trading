@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+# Local data, results and secrets never go into git
+data_store/
+results/
+runs/
+*.parquet
+*.sqlite
+*.db
+.env
+secrets/
+*.key
+KILL_SWITCH
