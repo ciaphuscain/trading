@@ -53,8 +53,12 @@ def run_tournament(data: MarketData, *, cfg: BacktestConfig = BacktestConfig(), 
         wf = walk_forward(name, REGISTRY[name], g, data, train_days=train_days, test_days=test_days, cfg=cfg,
                           registry=registry, hypothesis=HYPOTHESES.get(name, ""))
         families[name] = wf
-    # Charge every trial run so far (all families + baselines) - the honest denominator.
-    n_trials, var_sr = registry.n_trials(), registry.var_trial_sr()
+    # N: every trial run so far (all families + baselines) - the honest denominator.
+    # Var[SR]: dispersion of SR estimates WITHIN the family, floored at the sampling variance
+    # of a single SR estimate under the null (~1/T). Pooling families would measure real
+    # differences between strategies (e.g. cash vs. a losing strategy), not selection noise,
+    # and inflate the hurdle (observed in experiment E2 before this change).
+    n_trials = registry.n_trials()
     rows, decisions = [], {}
     for name, wf in families.items():
         oos = wf.oos_returns
@@ -63,11 +67,13 @@ def run_tournament(data: MarketData, *, cfg: BacktestConfig = BacktestConfig(), 
             t = wf.runs[int(f.chosen)].trades
             if len(t):
                 trades += int(((t.exit_date >= f.test_start) & (t.exit_date <= f.test_end)).sum())
+        var_sr = max(registry.var_trial_sr(name), 1.0 / max(len(oos) - 1, 1))
         ev = evidence_for(oos, n_trials=n_trials, var_trial_sr=var_sr, benchmark_returns=bh_r, n_trades=trades,
                           pbo=wf.pbo.get("pbo", float("nan")), seed=seed)
         ev["is_sharpe_mean"] = float(wf.folds.is_sharpe_ann.mean()) if len(wf.folds) else float("nan")
         ev["oos_sharpe_mean"] = float(wf.folds.oos_sharpe_ann.mean()) if len(wf.folds) else float("nan")
         ev["grid"] = wf.grid_stats
+        ev["var_trial_sr"] = var_sr
         decision, reasons = promotion_gate(ev, gate)
         registry.record_decision(family=name, decision=decision, reasons=reasons, evidence=_clean_nested(ev))
         decisions[name] = (decision, reasons)
