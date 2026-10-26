@@ -180,5 +180,19 @@ class RiskEngine:
             with self.audit_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(rec) + "\n")
 
+    # ------------------------------------------------------------ persistence
+    _PERSIST = ("peak_equity", "day_start_equity", "kill_switch", "orders_today", "new_positions_today",
+                "halt_sessions_left", "halted_forever", "drawdown_breaches")
+
+    def state_dict(self) -> dict:
+        d = {k: getattr(self.state, k) for k in self._PERSIST}
+        d["current_day"] = str(self.state.current_day) if self.state.current_day is not None else None
+        return d
+
+    def load_state(self, d: dict) -> None:
+        for k in self._PERSIST:
+            setattr(self.state, k, d[k])
+        self.state.current_day = pd.Timestamp(d["current_day"]) if d.get("current_day") else None
+
     def config(self) -> dict:
         return asdict(self.limits)

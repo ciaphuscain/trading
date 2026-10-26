@@ -110,13 +110,15 @@ def test_risk_engine_can_veto_everything():
     assert (r.risk_log.reason == "max_position_fraction").all() if len(r.risk_log) else True
 
 
-def test_insufficient_cash_shrinks_order_at_open():
-    # Price gaps up 50% overnight; the order sized at the close cannot be afforded in full.
+def test_unaffordable_buy_at_open_is_rejected_not_shrunk():
+    # Price gaps up 50% overnight; the order sized at the close cannot be afforded. Like a broker's
+    # risk system, the engine rejects it (it does not silently buy fewer shares).
     md = make_bars({"AAA": [(100, 100, 100, 100, 1e6), (150, 150, 150, 150, 1e6), (150, 150, 150, 150, 1e6)]})
     r = run_backtest(Scripted({W: Target(weights={"AAA": 1.0})}, eligibility=permissive_eligibility()), md, CFG)
-    assert r.fills.qty.iloc[0] < 49
+    assert r.fills.empty
     assert (r.cash >= 0).all()
-    assert (r.events.kind == "reduced_for_cash").any()
+    rej = r.events[r.events.kind == "order_rejected"]
+    assert rej.reason.tolist() == ["insufficient_cash_at_open"]
 
 
 def test_delisted_position_is_written_off():

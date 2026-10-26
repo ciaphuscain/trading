@@ -110,6 +110,32 @@ def cmd_tournament(args):
     return 0
 
 
+def cmd_paper(args):
+    from .backtest.engine import BacktestConfig
+    from .paper.session import PaperSession
+    from .strategies.library import REGISTRY
+
+    md = _load(args)
+    if args.strategy not in REGISTRY:
+        sys.exit(f"unknown strategy; choose from {sorted(REGISTRY)}")
+    ps = PaperSession(args.state, REGISTRY[args.strategy](**_parse_params(args.param)),
+                      BacktestConfig(initial_cash=args.cash, broker=args.broker))
+    recs = ps.run_until(md, pd.Timestamp(args.date) if args.date else None)
+    if args.backup:
+        ps.backup(Path(args.backup) / pd.Timestamp.now().strftime("%Y%m%d-%H%M%S"))
+    if not recs:
+        print("nothing to do: all sessions up to the requested date were already processed")
+        return 0
+    last = recs[-1]
+    print(json.dumps({"sessions_processed": len(recs), "last_session": last["date"], "equity": round(last["equity"], 2),
+                      "cash": round(last["cash"], 2), "positions": last["positions"],
+                      "orders_for_next_open": last["submitted"], "risk_rejected": last["risk_rejected"],
+                      "halted": last["halted"], "alerts": [e for r in recs for e in r["events"]
+                                                           if "ALERT" in e["kind"] or "rejected" in e["kind"]]},
+                     indent=2, default=str))
+    return 3 if last["halted"] else 0
+
+
 def cmd_registry(args):
     from .research.registry import Registry
 
@@ -153,6 +179,17 @@ def main(argv=None) -> int:
     p.add_argument("--test", type=int, default=126)
     p.add_argument("--out", default="results/tournament")
     p.set_defaults(fn=cmd_tournament)
+
+    p = sub.add_parser("paper", help="run the daily PAPER-trading session(s) up to the latest data")
+    _data_args(p)
+    p.add_argument("--strategy", required=True)
+    p.add_argument("--param", action="append", help="k=v strategy parameter (repeatable)")
+    p.add_argument("--state", default="runs/paper", help="state directory (SQLite, broker file, audit log)")
+    p.add_argument("--date", help="process sessions up to this date (default: last bar)")
+    p.add_argument("--cash", type=float, default=5000.0)
+    p.add_argument("--broker", default="discount_zero_delivery")
+    p.add_argument("--backup", help="directory for a timestamped state backup after the run")
+    p.set_defaults(fn=cmd_paper)
 
     p = sub.add_parser("registry", help="verify the experiment registry hash chain")
     p.add_argument("--registry", default="runs/registry.jsonl")

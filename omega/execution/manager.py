@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS fills (
   fill_id TEXT PRIMARY KEY, client_order_id TEXT NOT NULL, symbol TEXT NOT NULL, side TEXT NOT NULL,
   qty INTEGER NOT NULL, price REAL NOT NULL, applied TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS events (ts TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS adjustments (
+  ts TEXT NOT NULL, symbol TEXT NOT NULL, qty_delta INTEGER NOT NULL, reason TEXT NOT NULL);
 """
 
 
@@ -86,14 +88,30 @@ class OrderManager:
         return pd.read_sql_query("SELECT * FROM events", self.db)
 
     def local_positions(self) -> dict[str, int]:
+        """Positions implied by our own fills plus recorded non-trade adjustments."""
+        pos: dict[str, int] = {}
         with closing(self.db.execute("SELECT symbol, side, SUM(qty) FROM fills GROUP BY symbol, side")) as cur:
-            pos: dict[str, int] = {}
             for sym, side, q in cur.fetchall():
                 pos[sym] = pos.get(sym, 0) + (q if side == "BUY" else -q)
+        with closing(self.db.execute("SELECT symbol, SUM(qty_delta) FROM adjustments GROUP BY symbol")) as cur:
+            for sym, q in cur.fetchall():
+                pos[sym] = pos.get(sym, 0) + q
         return {k: v for k, v in pos.items() if v != 0}
 
+    def record_adjustment(self, symbol: str, qty_delta: int, reason: str) -> None:
+        """Non-trade position change (split/bonus, delisting write-off), audited. Without it,
+        reconciliation would correctly flag the change as an unexplained break."""
+        if qty_delta == 0:
+            return
+        with self.db:
+            self.db.execute("INSERT INTO adjustments VALUES (?,?,?,?)",
+                            (pd.Timestamp.now(tz="UTC").isoformat(), symbol, int(qty_delta), reason))
+        self._event("position_adjustment", symbol=symbol, qty_delta=int(qty_delta), reason=reason)
+
     # -------------------------------------------------------------------- submit
-    def submit(self, strategy: str, session, symbol: str, side: str, qty: int, attempt: int = 0) -> SubmitResult:
+    def submit(self, strategy: str, session, symbol: str, side: str, qty: int, attempt: int = 0,
+               after_close: bool = False) -> SubmitResult:
+        """after_close=True marks an after-market order: eligible from the session after ``session``."""
         cid = idempotency_key(strategy, session, symbol, side, qty, attempt)
         existing = self.get(cid)
         if existing is not None:
@@ -113,7 +131,8 @@ class OrderManager:
         o.transition(S.SUBMITTED, "write-ahead before broker call")
         self._save(o)
         try:
-            bo = self.broker.submit(cid, symbol, side, qty)
+            placed = str(pd.Timestamp(session).date()) if after_close else None
+            bo = self.broker.submit(cid, symbol, side, qty, placed=placed)
         except BrokerTimeout as e:
             o.transition(S.UNKNOWN, str(e))
             self._save(o)
@@ -168,6 +187,11 @@ class OrderManager:
                         self._save(o)
                         report["resolved"].append(o.client_order_id)
                         continue
+                else:
+                    # The broker acknowledged this order earlier and now has no record of it.
+                    # That is never normal: stop trading until a human looks.
+                    self.halted = True
+                    self._event("acknowledged_order_missing", cid=o.client_order_id, status=o.status.value)
                 report["still_open"].append(o.client_order_id)
                 continue
             if o.status == S.SUBMITTED:

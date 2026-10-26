@@ -8,7 +8,7 @@
 | Order of events per session | corporate actions → sells → buys at open → stops → delisting → mark → decide | engine docstring |
 | Slippage | adverse: 5 bps half spread + 10 bps·√(qty/day volume) | `test_slippage_is_adverse` |
 | Liquidity | fill ≤ 2% of the session's volume; remainder expires (partial fill event) | events log |
-| Whole shares / cash | quantities are ints; buys shrink until cost-inclusive outlay fits cash | `test_insufficient_cash_shrinks_order_at_open`, ledger property tests |
+| Whole shares / cash | quantities are ints; a buy whose cost-inclusive outlay exceeds cash at the open is rejected (as a broker RMS would), not shrunk | `test_unaffordable_buy_at_open_is_rejected_not_shrunk`, ledger property tests |
 | Stops | triggered when session low ≤ stop; fill at stop, or at the open if it gapped through | `test_gap_through_stop_fills_at_open_not_stop` |
 | Missing bar | orders for a symbol with no bar are rejected (not carried) | `test_order_for_missing_bar_is_rejected_not_filled` |
 | Splits/bonuses | share count × multiplier; fractional entitlement → cash; pending orders adjusted | `test_split_keeps_equity_continuous_and_dividend_credited` |

@@ -82,18 +82,76 @@ class _Pending:
     intent: OrderIntent
 
 
-def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = BacktestConfig()) -> BacktestResult:
-    dates = data.dates
-    syms = data.symbols
-    n = len(dates)
-    sidx = {s: j for j, s in enumerate(syms)}
+@dataclass(frozen=True)
+class MarketArrays:
+    """Numpy views of RAW market data shared by the backtester and the paper session."""
+
+    dates: pd.DatetimeIndex
+    sidx: dict
+    O: np.ndarray
+    H: np.ndarray
+    L: np.ndarray
+    C: np.ndarray
+    V: np.ndarray
+    has_bar: np.ndarray
+    C_ff: np.ndarray
+    avgvol: np.ndarray
+    last_bar_row: np.ndarray
+
+
+def market_arrays(data: MarketData) -> MarketArrays:
     raw = data.raw
+    n = len(data.dates)
     O, H, L, C, V = (raw.field(f).to_numpy(dtype=float) for f in ("open", "high", "low", "close", "volume"))
     has_bar = np.isfinite(C) & np.isfinite(O)
-    C_ff = raw.close.ffill().to_numpy(dtype=float)
-    avgvol = raw.volume.rolling(20, min_periods=5).mean().to_numpy(dtype=float)
-    last_bar_row = np.where(has_bar, np.arange(n)[:, None], -1)
-    last_bar_row = np.maximum.accumulate(last_bar_row, axis=0)
+    last_bar_row = np.maximum.accumulate(np.where(has_bar, np.arange(n)[:, None], -1), axis=0)
+    return MarketArrays(data.dates, {s: j for j, s in enumerate(data.symbols)}, O, H, L, C, V, has_bar,
+                        raw.close.ffill().to_numpy(dtype=float),
+                        raw.volume.rolling(20, min_periods=5).mean().to_numpy(dtype=float), last_bar_row)
+
+
+def plan_orders(strategy: Strategy, i: int, book: BookView, market_value: float, m: MarketArrays,
+                costs: CostModel, cfg: "BacktestConfig", risk: RiskEngine):
+    """Decision step after the close of session i: strategy -> allocator -> risk engine.
+
+    Shared verbatim by the backtester and the paper session so both apply identical rules.
+    Returns (approved [(order_id, intent)], rejected [(order_id, intent, reason)]).
+    """
+    d = m.dates[i]
+    target = strategy.decide(i, book)
+    if target.no_change:
+        return [], []
+    need = set(target.weights) | set(book.holdings)
+    prices = {s: float(m.C_ff[i, m.sidx[s]]) for s in need if np.isfinite(m.C_ff[i, m.sidx[s]])}
+    intents = allocate(target, book, prices, d, costs, cfg.allocator)
+    gross, cash_avail = market_value, book.cash
+    approved, rejected = [], []
+    for it in intents:
+        oid = f"{strategy.name}-{i}-{it.symbol}-{it.side}"
+        j = m.sidx[it.symbol]
+        lb = m.last_bar_row[i, j]
+        held_qty = book.holdings[it.symbol].qty if it.symbol in book.holdings else 0
+        av = float(m.avgvol[i, j]) if np.isfinite(m.avgvol[i, j]) else 0.0
+        chk = OrderCheck(oid, it.symbol, it.side, it.qty, it.ref_price, float(m.C_ff[i, j]),
+                         m.dates[lb] if lb >= 0 else None, av, held_qty, it.stop_frac)
+        dec = risk.check(chk, equity=book.equity, cash=cash_avail, gross_exposure=gross,
+                         position_value=held_qty * m.C_ff[i, j], decision_time=d)
+        if dec.approved:
+            approved.append((oid, it))
+            val = it.qty * it.ref_price
+            sign = 1 if it.side == "BUY" else -1
+            gross += sign * val
+            cash_avail -= sign * val
+        else:
+            rejected.append((oid, it, dec.reason))
+    return approved, rejected
+
+
+def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = BacktestConfig()) -> BacktestResult:
+    m = market_arrays(data)
+    dates, sidx = m.dates, m.sidx
+    n = len(dates)
+    O, L, V, has_bar, C_ff = m.O, m.L, m.V, m.has_bar, m.C_ff
 
     actions_at: dict[int, list] = defaultdict(list)
     for a in data.actions.itertuples(index=False):
@@ -142,8 +200,9 @@ def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = Bac
                 if amt:
                     ev(i, "dividend", a.symbol, amount=amt)
 
-        prev_marks = {s: C_ff[i - 1, sidx[s]] if i > 0 else C_ff[i, sidx[s]] for s in ledger.positions}
-        risk.start_day(d, ledger.equity(prev_marks) if i > 0 else cfg.initial_cash)
+        # Yesterday's closing equity. (Re-marking current positions at yesterday's closes would be
+        # wrong on a split ex-date: post-split quantity x pre-split price inflates the drawdown peak.)
+        risk.start_day(d, float(equity[i - 1]) if i > 0 else cfg.initial_cash)
 
         # 2. execute pending orders at the open ----------------------------------
         sold_today: set[str] = set()
@@ -173,14 +232,11 @@ def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = Bac
                 sold_today.add(it.symbol)
             else:
                 cb = charge(i, "BUY", qty * px, False)
-                while qty > 0 and qty * px + cb.total > ledger.cash:
-                    qty -= 1
-                    cb = charge(i, "BUY", qty * px, False)
-                if qty <= 0:
+                if qty * px + cb.total > ledger.cash:
+                    # A broker's risk system rejects an unaffordable cash-account buy; it does not
+                    # shrink it. (Shrinking here made the backtest diverge from the paper broker.)
                     ev(i, "order_rejected", it.symbol, order_id=p.order_id, reason="insufficient_cash_at_open")
                     continue
-                if qty < it.qty:
-                    ev(i, "reduced_for_cash", it.symbol, order_id=p.order_id, wanted=it.qty, filled=qty)
                 existed = it.symbol in ledger.positions
                 ledger.buy(d, it.symbol, qty, px, cb.total, p.order_id, index=i, reason=it.reason)
                 if it.stop_frac and not existed:
@@ -239,36 +295,10 @@ def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = Bac
             cash=float(ledger.cash),
             holdings={s: Holding(p.qty, p.entry_index, p.avg_cost) for s, p in ledger.positions.items()},
         )
-        target = strategy.decide(i, book)
-        if target.no_change:
-            continue
-        need = set(target.weights) | set(ledger.positions)
-        prices = {s: float(C_ff[i, sidx[s]]) for s in need if np.isfinite(C_ff[i, sidx[s]])}
-        intents = allocate(target, book, prices, d, costs, cfg.allocator)
-        gross = mv
-        cash_avail = ledger.cash
-        for it in intents:
-            oid = f"{strategy.name}-{i}-{it.symbol}-{it.side}"
-            j = sidx[it.symbol]
-            lb = last_bar_row[i, j]
-            held_qty = ledger.positions[it.symbol].qty if it.symbol in ledger.positions else 0
-            pv = held_qty * C_ff[i, j]
-            chk = OrderCheck(oid, it.symbol, it.side, it.qty, it.ref_price, float(C_ff[i, j]),
-                             dates[lb] if lb >= 0 else None, float(avgvol[i, j]) if np.isfinite(avgvol[i, j]) else 0.0,
-                             held_qty, it.stop_frac)
-            dec = risk.check(chk, equity=float(equity[i]), cash=cash_avail, gross_exposure=gross,
-                             position_value=pv, decision_time=d)
-            if dec.approved:
-                pending.append(_Pending(oid, it))
-                val = it.qty * it.ref_price
-                if it.side == "BUY":
-                    gross += val
-                    cash_avail -= val
-                else:
-                    gross -= val
-                    cash_avail += val
-            else:
-                ev(i, "risk_rejected", it.symbol, order_id=oid, reason=dec.reason)
+        approved, rejected = plan_orders(strategy, i, book, mv, m, costs, cfg, risk)
+        pending.extend(_Pending(oid, it) for oid, it in approved)
+        for oid, it, reason in rejected:
+            ev(i, "risk_rejected", it.symbol, order_id=oid, reason=reason)
 
     idx = dates
     fills = pd.DataFrame([f.__dict__ for f in ledger.fills])

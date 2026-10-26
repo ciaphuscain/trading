@@ -1,5 +1,7 @@
 """Order lifecycle, idempotency, ambiguous responses, crash recovery and reconciliation."""
 
+import sqlite3
+
 import pytest
 
 from omega.execution.broker import FailureConfig, PaperBroker
@@ -143,3 +145,51 @@ def test_live_is_impossible():
 
     with pytest.raises(PermissionError):
         OrderManager(FakeLive(0))
+
+
+def test_after_market_order_waits_for_next_session():
+    b = PaperBroker(10_000)
+    om = OrderManager(b)
+    r = om.submit("M1", DAY, "ABC", "BUY", 3, after_close=True)
+    assert b.match({"ABC": 10.0}, session=DAY) == []  # same session: not eligible
+    b.expire_day(session=DAY)
+    assert b.orders[r.order.client_order_id].status == "ACKNOWLEDGED"
+    assert b.match({"ABC": 10.0}, session="2025-03-04") == [r.order.client_order_id]
+
+
+def test_write_ahead_failure_prevents_broker_submission(tmp_path):
+    """Disk full / database locked while persisting: the order must NOT reach the broker."""
+    b = PaperBroker(10_000)
+    om = OrderManager(b, tmp_path / "o.sqlite")
+    real = om._save
+
+    def failing_save(o):
+        if o.status == S.SUBMITTED:
+            raise sqlite3.OperationalError("database or disk is full")
+        real(o)
+
+    om._save = failing_save
+    with pytest.raises(sqlite3.OperationalError):
+        om.submit("M1", DAY, "ABC", "BUY", 1)
+    assert b.submit_calls == 0 and b.orders == {}
+
+
+def test_database_lock_surfaces_instead_of_silently_trading(tmp_path):
+    db = tmp_path / "o.sqlite"
+    om = OrderManager(PaperBroker(10_000), db)
+    locker = sqlite3.connect(str(db), timeout=0)
+    locker.execute("BEGIN EXCLUSIVE")
+    om.db.execute("PRAGMA busy_timeout = 50")
+    with pytest.raises(sqlite3.OperationalError):
+        om.submit("M1", DAY, "ABC", "BUY", 1)
+    assert om.broker.submit_calls == 0
+    locker.rollback()
+
+
+def test_acknowledged_order_vanishing_at_broker_halts():
+    b = PaperBroker(10_000)
+    om = OrderManager(b)
+    r = om.submit("M1", DAY, "ABC", "BUY", 1)
+    del b.orders[r.order.client_order_id]
+    om.reconcile()
+    assert om.halted
