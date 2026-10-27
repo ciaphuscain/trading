@@ -30,7 +30,8 @@ Evidence-first quantitative research and **paper-trading** platform for a ₹5,0
 ## Quick start (Windows PowerShell)
 ```powershell
 py -3 -m venv .venv; .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+python -m pip install --require-hashes -r requirements.lock   # exact, hash-verified (Python 3.13)
+python -m pip install --no-deps -e .
 python -m pytest -q
 python -m omega costs --value 2500
 python -m omega validate   --synthetic
@@ -40,7 +41,8 @@ python -m omega tournament --data path\to\data --holdout-start 2024-01-01 --regi
 python -m omega registry   --registry runs\registry.jsonl
 python -m omega paper      --synthetic --strategy M1_xs_momentum --state runs\paper_demo   # daily paper job
 python -m omega fetch-nse  --start 2015-01-01 --cache data_store\bhavcopy                  # read NSE terms first
-python -m omega build-bars --cache data_store\bhavcopy --out data_store\nse
+python -m omega build-bars --cache data_store\bhavcopy --out data_store\nse                 # ISIN-continuous symbols
+python -m omega parse-actions --input nse_corporate_actions.csv --out data_store\nse\actions.csv
 ```
 Data directory format: `bars.csv` (date,symbol,open,high,low,close,volume), optional `actions.csv`
 (symbol,ex_date,kind∈{split,dividend},value), optional `benchmark.csv` (date,close).
@@ -75,7 +77,7 @@ docs/              specification, methods, assumptions, ADRs, logs
 | 7 Live | **not started by design** (ADR 0006) |
 
 Next step (needs the operator): download real data with `omega fetch-nse` from a machine where NSE is
-reachable, add a corporate-actions file, decide the open protocol question in EXPERIMENT_LOG (trade-count
+reachable, convert NSE's corporate-actions export with `omega parse-actions` (review the unparsed rows), decide the open protocol question in EXPERIMENT_LOG (trade-count
 rule) **before** looking at real results, then run the tournament with a locked holdout.
 
 Documentation index: [ARCHITECTURE](docs/ARCHITECTURE.md) · [STRATEGIES](docs/STRATEGIES.md) ·

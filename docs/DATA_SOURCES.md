@@ -45,8 +45,20 @@ Immutable per-day cache, ≥2 s between requests (default), weekday 404s remembe
 non-zip responses (e.g. a block page) raise. URL patterns for the legacy and UDiFF archives are
 **UNVERIFIED** (A-D7) and the module was only tested with a fake fetcher. Read NSE's terms of use first.
 
+## Symbol continuity (ISIN)
+`build-bars` gives each ISIN the latest ticker it traded under, so a rename is not mistaken for a
+delisting plus a new listing. If a ticker was later reused by a different ISIN, the older security is
+suffixed `~<ISIN>`; two securities are never merged. A change of ISIN (some mergers/schemes) is not bridged.
+
+## Corporate actions
+`python -m omega parse-actions --input <NSE corporate-actions CSV> --out data_store/nse/actions.csv`
+parses the PURPOSE text: dividends (summed when several), bonus a:b → multiplier (a+b)/b, face-value
+split/sub-division F1→F2 → F1/F2, consolidation → multiplier < 1. Rights issues, demergers, schemes,
+buy-backs and unrecognised text are **written to `actions_unparsed.csv` for manual review, never
+guessed**. Column names and phrasings are UNVERIFIED (A-D8). `validate` then cross-checks: a recorded
+split whose ratio is not visible in raw prices raises `split_not_visible`; a large raw move without a
+recorded action raises `unexplained_jump`.
+
 ## Known gaps / next steps
-* Build the corporate-action table from NSE announcements; cross-check with large raw jumps.
-* Symbol changes (renames) need an ISIN-keyed mapping; UDiFF files carry ISIN — prefer ISIN as the
-  instrument id. Not implemented yet (P1).
+* Rights issues and demergers are not modelled (positions holding them will show unexplained moves).
 * Exchange holiday calendar is currently inferred from the union of bar dates.

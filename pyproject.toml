@@ -31,3 +31,5 @@ omega = ["config/*.yaml"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Unclosed files/SQLite connections lock files on Windows: treat leaks as test failures.
+filterwarnings = ["error::ResourceWarning"]

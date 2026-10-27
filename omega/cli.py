@@ -118,11 +118,11 @@ def cmd_paper(args):
     md = _load(args)
     if args.strategy not in REGISTRY:
         sys.exit(f"unknown strategy; choose from {sorted(REGISTRY)}")
-    ps = PaperSession(args.state, REGISTRY[args.strategy](**_parse_params(args.param)),
-                      BacktestConfig(initial_cash=args.cash, broker=args.broker))
-    recs = ps.run_until(md, pd.Timestamp(args.date) if args.date else None)
-    if args.backup:
-        ps.backup(Path(args.backup) / pd.Timestamp.now().strftime("%Y%m%d-%H%M%S"))
+    with PaperSession(args.state, REGISTRY[args.strategy](**_parse_params(args.param)),
+                      BacktestConfig(initial_cash=args.cash, broker=args.broker)) as ps:
+        recs = ps.run_until(md, pd.Timestamp(args.date) if args.date else None)
+        if args.backup:
+            ps.backup(Path(args.backup) / pd.Timestamp.now().strftime("%Y%m%d-%H%M%S"))
     if not recs:
         print("nothing to do: all sessions up to the requested date were already processed")
         return 0

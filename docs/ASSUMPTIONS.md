@@ -24,6 +24,8 @@ data hosts), so no regulatory or tariff fact is marked VERIFIED.
 | A-D2 | Dividends credited on the ex-date (actual payment is later); TDS ignored | DESIGN (simplification) | engine | – |
 | A-D3 | Bhavcopy column names (legacy and UDiFF) as in `sources.py` | UNVERIFIED | sources.py | download a current file |
 | A-D7 | NSE archive URL patterns and the UDiFF switch date (2024-07-08) in `nse_archive.py` | UNVERIFIED | downloader | try one day manually |
+| A-D8 | NSE corporate-action export columns (SYMBOL, SERIES, PURPOSE, EX-DATE) and PURPOSE phrasings | UNVERIFIED | corporate_actions.py | parse a real export; review `actions_unparsed.csv` |
+| A-X2 | A session that trades at a single price (high = low) above/below the previous close is circuit-locked: buys (upper) / sells and stops (lower) cannot fill | HYPOTHESIS (daily-bar heuristic; true locks need order-book data) | backtest + paper | compare with real lock days |
 | A-X1 | Orders placed after the close behave as after-market orders filled at the next open; unaffordable cash-account buys are rejected by the broker, not reduced | UNVERIFIED (typical RMS behaviour) | backtest + paper broker | broker documentation |
 | A-D4 | Missing bar = not tradable that session | DESIGN | engine | – |
 | A-D5 | No bar for 10 sessions = delisted; written off at 50% of last close | HYPOTHESIS | engine | delisting outcomes study |

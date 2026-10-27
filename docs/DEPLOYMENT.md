@@ -7,7 +7,11 @@ cd trading
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1          # if blocked: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+# Recommended (Python 3.13): exact, hash-verified versions that CI tests on Windows
+python -m pip install --require-hashes -r requirements.lock
+python -m pip install --no-deps -e .
+# Alternative (any Python 3.11+): latest compatible versions
+# python -m pip install -e ".[dev]"
 python -m pytest -q                   # must pass before any research run
 python -m omega costs --value 2500
 ```

@@ -97,6 +97,12 @@ class MarketArrays:
     C_ff: np.ndarray
     avgvol: np.ndarray
     last_bar_row: np.ndarray
+    lock_up: np.ndarray    # session traded at a single price above the previous close: upper circuit
+    lock_down: np.ndarray  # single price below the previous close: lower circuit
+
+    def can_fill(self, i: int, j: int, side: str) -> bool:
+        """No sellers at an upper circuit, no buyers at a lower circuit (daily-bar heuristic)."""
+        return not (self.lock_up[i, j] if side == "BUY" else self.lock_down[i, j])
 
 
 def market_arrays(data: MarketData) -> MarketArrays:
@@ -105,9 +111,14 @@ def market_arrays(data: MarketData) -> MarketArrays:
     O, H, L, C, V = (raw.field(f).to_numpy(dtype=float) for f in ("open", "high", "low", "close", "volume"))
     has_bar = np.isfinite(C) & np.isfinite(O)
     last_bar_row = np.maximum.accumulate(np.where(has_bar, np.arange(n)[:, None], -1), axis=0)
-    return MarketArrays(data.dates, {s: j for j, s in enumerate(data.symbols)}, O, H, L, C, V, has_bar,
-                        raw.close.ffill().to_numpy(dtype=float),
-                        raw.volume.rolling(20, min_periods=5).mean().to_numpy(dtype=float), last_bar_row)
+    C_ff = raw.close.ffill().to_numpy(dtype=float)
+    prev = np.vstack([np.full((1, C.shape[1]), np.nan), C_ff[:-1]])
+    with np.errstate(invalid="ignore"):
+        flat = has_bar & np.isclose(H, L, rtol=1e-9, atol=0.0)
+        lock_up, lock_down = flat & (O > prev), flat & (O < prev)
+    return MarketArrays(data.dates, {s: j for j, s in enumerate(data.symbols)}, O, H, L, C, V, has_bar, C_ff,
+                        raw.volume.rolling(20, min_periods=5).mean().to_numpy(dtype=float), last_bar_row,
+                        lock_up, lock_down)
 
 
 def plan_orders(strategy: Strategy, i: int, book: BookView, market_value: float, m: MarketArrays,
@@ -213,6 +224,9 @@ def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = Bac
             if not has_bar[i, j]:
                 ev(i, "order_rejected", it.symbol, order_id=p.order_id, reason="no_bar")
                 continue
+            if not m.can_fill(i, j, it.side):
+                ev(i, "order_rejected", it.symbol, order_id=p.order_id, reason="circuit_locked")
+                continue
             vol = V[i, j]
             cap = int(slip.max_participation * vol) if np.isfinite(vol) else 0
             qty = it.qty
@@ -253,6 +267,9 @@ def run_backtest(strategy: Strategy, data: MarketData, cfg: BacktestConfig = Bac
             pos = ledger.positions[s]
             j = sidx[s]
             if pos.stop_price is None or not has_bar[i, j] or L[i, j] > pos.stop_price:
+                continue
+            if not m.can_fill(i, j, "SELL"):
+                ev(i, "stop_blocked_circuit", s)  # cannot sell into a lower circuit; retried next session
                 continue
             gap = O[i, j] <= pos.stop_price
             ref = O[i, j] if gap else pos.stop_price

@@ -200,7 +200,7 @@ class PaperBroker:
         return session is None or bo.placed is None or bo.placed < session
 
     def match(self, prices: dict[str, float], price_fn=None, symbols: set[str] | None = None,
-              session: str | None = None) -> list[str]:
+              session: str | None = None, can_fill=None) -> list[str]:
         """Fill resting orders (sells first, like a broker freeing cash).
 
         prices: reference price per symbol (e.g. the session open). price_fn(symbol, side, qty, ref)
@@ -215,6 +215,8 @@ class PaperBroker:
             ref = prices.get(bo.symbol)
             if ref is None or not math.isfinite(ref):
                 continue
+            if can_fill is not None and not can_fill(bo.symbol, bo.side):
+                continue  # no counterparty (e.g. circuit-locked); a day order then expires
             rem = bo.qty - bo.filled_qty
             q = rem
             if self._rng.random() < self.f.partial_fill and rem > 1:

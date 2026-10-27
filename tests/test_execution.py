@@ -184,6 +184,7 @@ def test_database_lock_surfaces_instead_of_silently_trading(tmp_path):
         om.submit("M1", DAY, "ABC", "BUY", 1)
     assert om.broker.submit_calls == 0
     locker.rollback()
+    locker.close()
 
 
 def test_acknowledged_order_vanishing_at_broker_halts():

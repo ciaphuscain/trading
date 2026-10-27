@@ -57,6 +57,9 @@ class OrderManager:
         self.not_found_limit = not_found_limit
         self._not_found: dict[str, int] = {}
 
+    def close(self) -> None:
+        self.db.close()
+
     # ---------------------------------------------------------------- persistence
     def _save(self, o: Order) -> None:
         body = json.dumps({**o.__dict__, "status": o.status.value})

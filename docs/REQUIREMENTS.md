@@ -17,7 +17,7 @@ P4 experimental · REJECT. ✔ = implemented and tested in this repository.
 | P0-10 | Locked holdout with audited access | P0 | ✔ | prevents silent contamination |
 | P0-11 | Walk-forward OOS, DSR, PBO, bootstrap CI, promotion gate | P0 | ✔ | overfitting defence |
 | P0-12 | Order state machine, idempotency, UNKNOWN state, reconciliation, no-live guarantee | P0 | ✔ | duplicate/ambiguous orders |
-| P1-1 | Real NSE data ingestion: bhavcopy downloader + corporate-action table + ISIN mapping | P1 | parser ✔, downloader ✔ (fake-fetcher tested; live endpoint unverified), actions table ☐, ISIN ☐ | nothing can be concluded without it |
+| P1-1 | Real NSE data ingestion: bhavcopy downloader + corporate-action table + ISIN mapping | P1 | parser ✔, downloader ✔ (fake-fetcher tested; live endpoint unverified), corporate-action parser ✔, ISIN continuity ✔ | nothing can be concluded without it |
 | P1-2 | Parameter sensitivity tables / plateau check | P1 | ✔ (per-parameter marginal Sharpe in every report) | stability evidence |
 | P1-3 | Regime-split performance tables (trend/vol regimes) | P1 | ✔ (causal threshold regimes, OOS breakdown in report) | robustness |
 | P1-4 | Daily paper-trading job (Task Scheduler) using OrderManager + PaperBroker + SQLite | P1 | ✔ `omega paper`, `scripts/paper_daily.ps1` | Phase 5 |

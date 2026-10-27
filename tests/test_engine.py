@@ -113,7 +113,8 @@ def test_risk_engine_can_veto_everything():
 def test_unaffordable_buy_at_open_is_rejected_not_shrunk():
     # Price gaps up 50% overnight; the order sized at the close cannot be afforded. Like a broker's
     # risk system, the engine rejects it (it does not silently buy fewer shares).
-    md = make_bars({"AAA": [(100, 100, 100, 100, 1e6), (150, 150, 150, 150, 1e6), (150, 150, 150, 150, 1e6)]})
+    # (the gap-up bar trades in a range, so it is not a circuit lock)
+    md = make_bars({"AAA": [(100, 100, 100, 100, 1e6), (150, 152, 148, 150, 1e6), (150, 152, 148, 150, 1e6)]})
     r = run_backtest(Scripted({W: Target(weights={"AAA": 1.0})}, eligibility=permissive_eligibility()), md, CFG)
     assert r.fills.empty
     assert (r.cash >= 0).all()
@@ -129,3 +130,17 @@ def test_delisted_position_is_written_off():
     assert (r.events.kind == "write_off").any()
     q = int(r.fills.qty.iloc[0])
     assert r.trades.iloc[-1].proceeds == pytest.approx(q * 100 * 0.5)
+
+
+def test_circuit_locked_sessions_cannot_be_traded_against():
+    # Day W+1 opens locked at the upper circuit (H == L, gap up): the buy cannot fill.
+    # The position bought later cannot be sold into a lower-circuit lock either.
+    bars = [(100, 100, 100, 100, 1e6), (105, 105, 105, 105, 1e6), (106, 107, 105, 106, 1e6),
+            (106, 107, 105, 106, 1e6), (95, 95, 95, 95, 1e6), (96, 97, 95, 96, 1e6)]
+    md = make_bars({"AAA": bars})
+    plan = {W: Target(weights={"AAA": 0.5}), W + 1: Target(weights={"AAA": 0.5}), W + 3: Target(weights={})}
+    r = run_backtest(Scripted(plan, eligibility=permissive_eligibility()), md, CFG)
+    rej = r.events[r.events.kind == "order_rejected"]
+    assert rej.reason.tolist() == ["circuit_locked", "circuit_locked"]
+    assert r.fills.side.tolist() == ["BUY"]  # bought on W+2; the sell on W+4 was blocked
+    assert r.fills.date.iloc[0] == md.dates[W + 2]

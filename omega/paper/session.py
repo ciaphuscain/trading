@@ -51,7 +51,11 @@ class PaperSession:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.strategy, self.cfg = strategy, cfg
         self.db = sqlite3.connect(str(self.dir / "session.sqlite"))
-        _check_integrity(self.db)
+        try:
+            _check_integrity(self.db)
+        except sqlite3.DatabaseError:
+            self.db.close()  # do not leave the (corrupted) file locked
+            raise
         self.db.executescript(_SCHEMA)
         self.costs = CostModel(cfg.broker, cfg.cost_schedule)
         # The simulated broker persists itself on every mutation (it plays an external system).
@@ -64,6 +68,17 @@ class PaperSession:
         self.meta: dict = self._get("meta") or {}
         self.pending: dict = self._get("pending") or {}
         self._fee_date = None
+
+    def close(self) -> None:
+        """Release the database files (on Windows an open connection keeps them locked)."""
+        self.manager.close()
+        self.db.close()
+
+    def __enter__(self) -> "PaperSession":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
 
     # ------------------------------------------------------------------ storage
     def _get(self, key):
@@ -159,7 +174,8 @@ class PaperSession:
         opens = {s: float(m.O[k, j]) for s, j in m.sidx.items() if m.has_bar[k, j]}
         price_fn = lambda s, side, q, ref: slip.price(ref, side, q, m.V[k, m.sidx[s]])  # noqa: E731
         today = str(d.date())
-        b.match(opens, price_fn, session=today)
+        can_fill = lambda s, side: m.can_fill(k, m.sidx[s], side)  # noqa: E731
+        b.match(opens, price_fn, session=today, can_fill=can_fill)
         b.expire_day(session=today)
         rec = self.manager.reconcile()
         fills_today = []
@@ -187,6 +203,9 @@ class PaperSession:
             j = m.sidx[s]
             stop = self.meta.get(s, {}).get("stop")
             if stop is None or not m.has_bar[k, j] or m.L[k, j] > stop:
+                continue
+            if not m.can_fill(k, j, "SELL"):
+                events.append({"kind": "stop_blocked_circuit", "symbol": s})
                 continue
             gap = m.O[k, j] <= stop
             ref = float(m.O[k, j] if gap else stop)

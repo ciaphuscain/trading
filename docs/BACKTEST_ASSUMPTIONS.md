@@ -15,7 +15,7 @@
 | Dividends | cash credited on ex-date (simplification: real payment later; TDS ignored) | same |
 | Delisting | no bar for 10 sessions ⇒ write-off at 50% of last close (HYPOTHESIS A-D5) | `test_delisted_position_is_written_off` |
 | Marking | last available raw close (stale marks for suspended names) | – |
-| Circuit limits | not modelled: a stock locked at upper/lower circuit is assumed tradable at the open | known gap |
+| Circuit limits | a single-price session above (below) the previous close is treated as an upper (lower) circuit lock: buys (sells, stops) are rejected that session (A-X2) | `test_circuit_locked_sessions_cannot_be_traded_against`, `test_paper_matches_backtest_on_circuit_locked_sessions` |
 | Intraday path | unknown; only OHLC; stop + exit on the same bar assumes stop first | known gap |
 | Taxes | excluded from returns; STCG estimate reported separately | `test_stcg_estimate_by_financial_year` |
 | Determinism | no randomness in the engine; identical inputs ⇒ identical outputs | `test_deterministic_replay` |

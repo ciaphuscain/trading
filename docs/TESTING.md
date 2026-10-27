@@ -1,6 +1,6 @@
 # Testing
 
-Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build environment: **97 passed in ~60 s**
+Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build environment: **114 passed in ~40 s**, also on the exact locked versions in `requirements.lock`; `ResourceWarning`s (leaked files/SQLite handles) fail the suite
 (Linux, Python 3.13; the paper-session replays dominate the runtime). GitHub Actions CI passed on windows-latest and ubuntu-latest with Python 3.11 and 3.13, including the paper-session tests (run 40279036398, commit 9a7affc).
 
 | Layer | File | What it proves |
@@ -14,6 +14,7 @@ Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build env
 | Research protocol | `tests/test_research.py` | registry tamper detection; holdout lock; walk-forward bookkeeping; gate; null-market tournament promotes nothing |
 | Risk engine | `tests/test_risk.py` | each rule, kill switch file + manual with audit, drawdown cooldown/re-arm |
 | Execution / failure injection | `tests/test_execution.py` | see table below |
+| Corporate actions | `tests/test_corporate_actions.py` | PURPOSE parsing (dividends, bonus, splits, consolidation), unsupported actions reported not guessed, duplicate rows, split-visibility validation |
 | Paper trading | `tests/test_paper.py` | day-by-day paper run == backtest equity (all 4 strategies); restart; crash before commit recovers without duplicates; kill-switch file; backup; corrupted DB refused |
 
 ## Failure injection
@@ -29,6 +30,7 @@ Run: `python -m pytest` (Windows PowerShell or Linux). Last run in the build env
 | Missing session for a symbol | order rejected | ✔ | strategy re-decides | – |
 | Stale data | risk rejects | ✔ | – | – |
 | Sudden gap through stop | fill at open | ✔ | – | gaps larger than modelled slippage |
+| Circuit-locked session | buys rejected at upper lock, sells/stops blocked at lower lock; paper == backtest | ✔ `test_circuit_locked_sessions_…`, `test_paper_matches_backtest_on_circuit_locked_sessions` | retried next session | heuristic from daily bars |
 | Fee change | new dated schedule row | ✔ dated lookup test | – | operator must update YAML |
 | Disk full while persisting (write-ahead fails) | order never reaches the broker | ✔ `test_write_ahead_failure_prevents_broker_submission` | retry after freeing space | – |
 | Database locked by another process | error surfaces, no broker call | ✔ `test_database_lock_surfaces_instead_of_silently_trading` | rerun job | two schedulers running at once (avoid) |
