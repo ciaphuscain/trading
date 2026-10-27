@@ -76,3 +76,18 @@ def test_downloader_rejects_non_zip_response(tmp_path):
 
     with pytest.raises(ValueError):
         download_range("2025-01-01", "2025-01-01", tmp_path, fetch=lambda u: b"<html>blocked</html>", sleep=lambda s: None)
+
+
+def test_isin_unification_bridges_renames_and_never_merges_reused_tickers():
+    from omega.data.nse_archive import unify_symbols_by_isin
+
+    d = pd.to_datetime(["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-06"])
+    bars = pd.DataFrame({
+        "date": [d[0], d[1], d[2], d[3], d[0], d[1]],
+        # INE1 traded as OLDCO, renamed NEWCO; INE2 traded as NEWCO earlier (ticker later reused)
+        "symbol": ["OLDCO", "OLDCO", "NEWCO", "NEWCO", "NEWCO", "NEWCO"],
+        "isin": ["INE1", "INE1", "INE1", "INE1", "INE2", "INE2"],
+        "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0})
+    out = unify_symbols_by_isin(bars)
+    assert set(out[out["isin"] == "INE1"].symbol) == {"NEWCO"}
+    assert set(out[out["isin"] == "INE2"].symbol) == {"NEWCO~INE2"}

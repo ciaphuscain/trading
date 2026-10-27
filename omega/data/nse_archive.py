@@ -104,4 +104,29 @@ def build_bars(cache_dir: str | Path, series: tuple[str, ...] = ("EQ",)) -> pd.D
     if not frames:
         return pd.DataFrame(columns=["date", "symbol", "open", "high", "low", "close", "volume"])
     bars = pd.concat(frames, ignore_index=True)
+    if "isin" in bars.columns:
+        bars = unify_symbols_by_isin(bars).drop(columns="isin")
     return bars.sort_values(["date", "symbol"]).reset_index(drop=True)
+
+
+def unify_symbols_by_isin(bars: pd.DataFrame) -> pd.DataFrame:
+    """Give every ISIN one symbol across its whole history: the LATEST ticker it traded under.
+
+    NSE tickers change on renames (e.g. after a corporate restructuring) while the ISIN stays,
+    so without this a renamed stock looks like a delisting plus a new listing. If the latest
+    ticker of one ISIN was used earlier by a different ISIN (ticker reuse), the older instrument
+    is suffixed ``~<ISIN>`` so two securities are never merged. Rows without an ISIN keep
+    their ticker. Note: a change of ISIN itself (e.g. some mergers) is NOT bridged.
+    """
+    b = bars.copy()
+    has = b["isin"].notna() & (b["isin"] != "") & (b["isin"] != "NAN")
+    latest = b[has].sort_values("date").groupby("isin")["symbol"].last()
+    owner_dates = b[has].groupby("isin")["date"].max()
+    taken: dict[str, str] = {}
+    for isin in owner_dates.sort_values(ascending=False).index:  # most recently active claims first
+        sym = latest[isin]
+        taken[isin] = sym if sym not in taken.values() else f"{sym}~{isin}"
+    b.loc[has, "symbol"] = b.loc[has, "isin"].map(taken)
+    if b.duplicated(["date", "symbol"]).any():
+        raise ValueError("ISIN unification produced duplicate (date, symbol) bars; inspect the source files")
+    return b

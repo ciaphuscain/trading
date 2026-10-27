@@ -62,6 +62,8 @@ def read_bhavcopy(path: str | Path, series: tuple[str, ...] = ("EQ",)) -> pd.Dat
     else:
         raise ValueError(f"unrecognised bhavcopy layout in {path}: {list(df.columns)[:12]}")
     out = df[list(cmap)].rename(columns=cmap)
+    if "ISIN" in df.columns:  # present in both layouts (UNVERIFIED for every historical year)
+        out["isin"] = df["ISIN"].astype(str).str.strip().str.upper()
     out["series"] = out["series"].astype(str).str.strip()
     out = out[out["series"].isin(series)].drop(columns="series")
     out["symbol"] = out["symbol"].astype(str).str.strip().str.upper()

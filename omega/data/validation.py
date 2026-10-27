@@ -149,6 +149,17 @@ def validate(
             rep.issues.append(Issue("ERROR", "action_kind", row.symbol, row.ex_date, str(row.kind)))
         elif not np.isfinite(row.value) or row.value <= 0:
             rep.issues.append(Issue("ERROR", "action_value", row.symbol, row.ex_date, str(row.value)))
+        elif row.kind == "split" and row.symbol in c.columns and abs(row.value - 1) > 0.05:
+            # A recorded split should be visible in raw prices: open(ex) / prev close ~ 1/multiplier.
+            pos = idx.searchsorted(pd.Timestamp(row.ex_date))
+            prev = c[row.symbol].iloc[:pos].dropna()
+            px = o[row.symbol].iloc[pos] if pos < len(idx) else np.nan
+            if len(prev) and np.isfinite(px):
+                implied = prev.iloc[-1] / px
+                if abs(implied / row.value - 1) > 0.3:
+                    rep.issues.append(Issue("WARN", "split_not_visible", row.symbol, row.ex_date,
+                                            f"recorded x{row.value:g}, prices imply x{implied:.2f} "
+                                            "(wrong date/ratio, or prices already adjusted?)"))
     return rep
 
 

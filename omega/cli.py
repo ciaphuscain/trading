@@ -157,6 +157,21 @@ def cmd_build_bars(args):
     return 0
 
 
+def cmd_parse_actions(args):
+    from .data.corporate_actions import parse_nse_actions
+
+    acts, bad = parse_nse_actions(args.input)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    acts.to_csv(out, index=False)
+    print(f"wrote {len(acts)} actions to {out}")
+    if len(bad):
+        bad_path = out.with_name("actions_unparsed.csv")
+        bad.to_csv(bad_path, index=False)
+        print(f"{len(bad)} rows NOT modelled (rights, demergers, unknown text) -> {bad_path}; review them manually")
+    return 0
+
+
 def cmd_registry(args):
     from .research.registry import Registry
 
@@ -223,6 +238,11 @@ def main(argv=None) -> int:
     p.add_argument("--cache", default="data_store/bhavcopy")
     p.add_argument("--out", default="data_store/nse")
     p.set_defaults(fn=cmd_build_bars)
+
+    p = sub.add_parser("parse-actions", help="convert an NSE corporate-actions CSV export to actions.csv")
+    p.add_argument("--input", required=True)
+    p.add_argument("--out", default="data_store/nse/actions.csv")
+    p.set_defaults(fn=cmd_parse_actions)
 
     p = sub.add_parser("registry", help="verify the experiment registry hash chain")
     p.add_argument("--registry", default="runs/registry.jsonl")
